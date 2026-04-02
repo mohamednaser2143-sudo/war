@@ -341,14 +341,15 @@ function startOnline(){
       const [r,c]=key.split('_').map(Number);
       if(r>=0&&r<G.size&&c>=0&&c<G.size){
         const gd=gridData[key];
+        // Skip our own tiles — local state is always authoritative
+        if(gd.owner===fbMyId) continue;
         // Find local player idx for this Firebase owner
         const ownerPlayer=G.players.find(p=>p.fbId===gd.owner);
         if(ownerPlayer){
           G.grid[r][c].owner=ownerPlayer.id;
           G.grid[r][c].troops=gd.troops||0;
         } else if(gd.owner){
-          // Remote player we haven't seen yet — mark with special owner
-          G.grid[r][c].owner=-2; // unknown remote
+          G.grid[r][c].owner=-2;
           G.grid[r][c].troops=gd.troops||0;
         }
       }
