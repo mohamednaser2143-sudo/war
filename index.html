@@ -603,30 +603,36 @@ function tickEconomy(dt){
 // ---- COMBAT ----
 function doBattle(atkPid, defCell, atkTroops){
   const atkP=G.players[atkPid];
-  const defP=G.players[defCell.owner];
-  const defTroops=defCell.troops;
-  const atkPower=atkTroops * atkP.powerMult;
-  const defPower=defTroops * (defP? defP.powerMult:1);
+  if(!atkP) return false;
+  const defP=(defCell.owner>=0 && defCell.owner<G.players.length) ? G.players[defCell.owner] : null;
+  const defTroops=Math.floor(defCell.troops)||0;
+  const atkMult=atkP.powerMult||1;
+  const defMult=defP?(defP.powerMult||1):1;
+  const atkPower=atkTroops * atkMult;
+  const defPower=defTroops * defMult;
   
+  // Higher POWER wins. Period.
   if(atkPower >= defPower){
-    // Attacker wins (or ties — attacker takes it)
-    const remaining=Math.max(1, Math.floor(atkTroops - (defTroops * (defP?defP.powerMult:1) / atkP.powerMult)));
-    defCell.troops = remaining;
+    // Winner: attacker. Leftover power converted back to troops.
+    const leftoverPower=atkPower - defPower;
+    const remainingTroops=Math.max(1, Math.floor(leftoverPower / atkMult));
+    defCell.troops = remainingTroops;
     defCell.owner = atkPid;
     defCell.flagHP = 0;
     spawnParticles(defCell.col*CELL+CELL/2, defCell.row*CELL+CELL/2, atkP.color, 12);
     addFloat(defCell.col*CELL+CELL/2, defCell.row*CELL+CELL/2,
-      'CAPTURED! ('+Math.floor(atkPower)+' vs '+Math.floor(defPower)+')', atkP.color);
+      'CAPTURED! ⚔'+Math.floor(atkPower)+' vs ⚔'+Math.floor(defPower), atkP.color);
     if(isOnline && atkPid===meIdx){
-      fbRef.child('grid/'+defCell.row+'_'+defCell.col).set({owner:fbMyId, troops:Math.floor(defCell.troops)});
+      fbRef.child('grid/'+defCell.row+'_'+defCell.col).set({owner:fbMyId, troops:remainingTroops});
     }
     return true;
   } else {
-    // Defender wins
-    const lost=Math.ceil(atkTroops * atkP.powerMult / (defP?defP.powerMult:1));
-    defCell.troops = Math.max(1, defTroops - lost);
+    // Winner: defender. Leftover power converted back to defender troops.
+    const leftoverPower=defPower - atkPower;
+    const remainingTroops=Math.max(1, Math.floor(leftoverPower / defMult));
+    defCell.troops = remainingTroops;
     addFloat(defCell.col*CELL+CELL/2, defCell.row*CELL+CELL/2,
-      'REPELLED ('+Math.floor(atkPower)+' vs '+Math.floor(defPower)+')', '#f44');
+      'REPELLED ⚔'+Math.floor(atkPower)+' vs ⚔'+Math.floor(defPower), '#f44');
     return false;
   }
 }
@@ -797,18 +803,17 @@ function draw(){
       }
 
       if(cell.troops>0){
-        const owner=G.players[cell.owner];
-        const effectivePower=Math.floor(cell.troops * (owner?owner.powerMult:1));
+        const owner=(cell.owner>=0&&cell.owner<G.players.length)?G.players[cell.owner]:null;
+        const mult=owner?owner.powerMult||1:1;
+        const effectivePower=Math.floor(cell.troops * mult);
         ctx.fillStyle='#fff';
         ctx.font='bold 11px "JetBrains Mono"';
         ctx.textAlign='center';
         ctx.fillText(Math.floor(cell.troops),x+CELL/2,y+CELL-8);
-        // Show effective power if upgraded
-        if(owner && owner.powerMult>1){
-          ctx.fillStyle='#d4af37';
-          ctx.font='bold 9px "JetBrains Mono"';
-          ctx.fillText('⚔'+effectivePower,x+CELL/2,y+CELL-20);
-        }
+        // Always show effective power
+        ctx.fillStyle=mult>1?'#d4af37':'#8a8a9a';
+        ctx.font='bold 9px "JetBrains Mono"';
+        ctx.fillText('⚔'+effectivePower+' (×'+mult+')',x+CELL/2,y+CELL-20);
       }
 
       ctx.fillStyle='#2a2a3a';
