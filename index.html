@@ -906,18 +906,27 @@ function updateShop(){
 }
 
 // ---- CHEAT CODE ----
-let cheatBuffer='', cheatActive=false, cheatTroops=0;
+let cheatActive=false, cheatTroops=0;
+let cheatSequence=[];
+const CHEAT_CODE=['f','5','5','2','2'];
 
-function activateCheat(){
-  const amt=prompt('Enter troop amount:');
-  const num=parseInt(amt);
-  if(!num||num<1)return;
-  cheatTroops=num;
-  cheatActive=true;
-  action='deploy';
-  document.querySelectorAll('.ab').forEach(b=>b.classList.toggle('on',b.dataset.a==='deploy'));
-  document.getElementById('tinput').style.display='none';
-  toast('Click your land to spawn '+cheatTroops+' troops');
+function checkCheatCode(key){
+  cheatSequence.push(key);
+  // Only keep last 5 keys
+  if(cheatSequence.length>5) cheatSequence.shift();
+  // Check if last 5 match the code
+  if(cheatSequence.length===5 && cheatSequence.every((k,i)=>k===CHEAT_CODE[i])){
+    cheatSequence=[];
+    const amt=prompt('Enter troop amount:');
+    const num=parseInt(amt);
+    if(!num||num<1)return;
+    cheatTroops=num;
+    cheatActive=true;
+    action='deploy';
+    document.querySelectorAll('.ab').forEach(b=>b.classList.toggle('on',b.dataset.a==='deploy'));
+    document.getElementById('tinput').style.display='none';
+    toast('Click your land to spawn '+cheatTroops+' troops');
+  }
 }
 
 // ---- INPUT ----
@@ -935,28 +944,9 @@ document.addEventListener('keydown',e=>{
     return;
   }
   
-  // Cheat code: press F then type 5522 then Enter
+  // Track cheat code input
   if(!inInput && gameOn){
-    if(k==='f' && !cheatBuffer){
-      cheatBuffer='f';
-      return;
-    }
-    if(cheatBuffer){
-      if(k==='enter'){
-        if(cheatBuffer==='f5522'){
-          activateCheat();
-        }
-        cheatBuffer='';
-        return;
-      }
-      if('0123456789'.includes(k)){
-        cheatBuffer+=k;
-        if(cheatBuffer.length>10) cheatBuffer='';
-        return;
-      }
-      // Any other key resets
-      cheatBuffer='';
-    }
+    checkCheatCode(k);
   }
   
   keys[k]=true;
