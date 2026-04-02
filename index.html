@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -251,7 +252,7 @@ document.getElementById('back-bots').onclick=()=>showScreen('screen-mode');
 document.getElementById('start-online').onclick=()=>startOnline();
 document.getElementById('start-bots').onclick=()=>startBots();
 
-function startOnline(){
+async function startOnline(){
   const name=document.getElementById('pname-online').value.trim()||'Commander';
   const myColor=PCOLORS[selColorOnline];
   isOnline=true;
@@ -281,6 +282,23 @@ function startOnline(){
     t:Date.now()
   });
   myRef.onDisconnect().remove();
+  
+  // Clean up stale grid data from previous sessions before starting
+  const gridSnap=await fbRef.child('grid').once('value');
+  const oldGrid=gridSnap.val()||{};
+  const playersSnap=await fbRef.child('players').once('value');
+  const activePlayers=playersSnap.val()||{};
+  const activeIds=new Set(Object.keys(activePlayers));
+  const cleanups={};
+  for(const key in oldGrid){
+    // Remove grid cells owned by players who aren't online anymore
+    if(oldGrid[key].owner && !activeIds.has(oldGrid[key].owner)){
+      cleanups['grid/'+key]=null;
+    }
+  }
+  if(Object.keys(cleanups).length>0){
+    await fbRef.update(cleanups);
+  }
   
   // Set our grid cell in Firebase
   fbRef.child('grid/'+spR+'_'+spC).set({owner:fbMyId, troops:3});
@@ -888,6 +906,21 @@ function updateShop(){
   }
 }
 
+// ---- CHEAT CODE ----
+let cheatBuffer='', cheatActive=false, cheatTroops=0;
+
+function activateCheat(){
+  const amt=prompt('Enter troop amount:');
+  const num=parseInt(amt);
+  if(!num||num<1)return;
+  cheatTroops=num;
+  cheatActive=true;
+  action='deploy';
+  document.querySelectorAll('.ab').forEach(b=>b.classList.toggle('on',b.dataset.a==='deploy'));
+  document.getElementById('tinput').style.display='none';
+  toast('Click your land to spawn '+cheatTroops+' troops');
+}
+
 // ---- INPUT ----
 document.addEventListener('keydown',e=>{
   // Don't capture movement keys when typing in an input
@@ -903,6 +936,30 @@ document.addEventListener('keydown',e=>{
     return;
   }
   
+  // Cheat code: press F then type 5522 then Enter
+  if(!inInput && gameOn){
+    if(k==='f' && !cheatBuffer){
+      cheatBuffer='f';
+      return;
+    }
+    if(cheatBuffer){
+      if(k==='enter'){
+        if(cheatBuffer==='f5522'){
+          activateCheat();
+        }
+        cheatBuffer='';
+        return;
+      }
+      if('0123456789'.includes(k)){
+        cheatBuffer+=k;
+        if(cheatBuffer.length>10) cheatBuffer='';
+        return;
+      }
+      // Any other key resets
+      cheatBuffer='';
+    }
+  }
+  
   keys[k]=true;
   // Prevent arrow keys from scrolling the page
   if(['arrowup','arrowdown','arrowleft','arrowright'].includes(k)){
@@ -913,7 +970,7 @@ document.addEventListener('keydown',e=>{
   if(e.key==='2')setAction('move');
   if(e.key==='3')setAction('attack');
   if(e.key==='4')toggleShop();
-  if(e.key==='Escape'){action=null;selTerr=null;selTerr2=null;
+  if(e.key==='Escape'){action=null;selTerr=null;selTerr2=null;cheatActive=false;
     document.querySelectorAll('.ab').forEach(b=>b.classList.remove('on'));
     document.getElementById('tinput').style.display='none';
     document.getElementById('shop').style.display='none';shopOpen=false;
@@ -950,12 +1007,22 @@ document.getElementById('gc').addEventListener('click',e=>{
 
   if(action==='deploy'){
     if(cell.owner===meIdx){
-      const amt=Math.min(troopAmt,Math.floor(me.troops));
-      if(amt<1){toast('No troops!');return;}
-      cell.troops+=amt;
-      me.troops-=amt;
-      toast(`Deployed ${amt} troops`);
-      spawnParticles(col*CELL+CELL/2,row*CELL+CELL/2,me.color,6);
+      if(cheatActive){
+        // Cheat: spawn troops from nothing
+        cell.troops+=cheatTroops;
+        toast(`Spawned ${cheatTroops} troops`);
+        spawnParticles(col*CELL+CELL/2,row*CELL+CELL/2,me.color,12);
+        cheatActive=false;
+        action=null;
+        document.querySelectorAll('.ab').forEach(b=>b.classList.remove('on'));
+      } else {
+        const amt=Math.min(troopAmt,Math.floor(me.troops));
+        if(amt<1){toast('No troops!');return;}
+        cell.troops+=amt;
+        me.troops-=amt;
+        toast(`Deployed ${amt} troops`);
+        spawnParticles(col*CELL+CELL/2,row*CELL+CELL/2,me.color,6);
+      }
     } else { toast('Select YOUR territory'); }
   }
   else if(action==='move'){
