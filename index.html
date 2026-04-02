@@ -124,7 +124,8 @@ canvas#gc{display:block;cursor:crosshair}
     <span class="l">GOLD </span><span class="v" id="hgold">0</span>&nbsp;&nbsp;
     <span class="l">TROOPS </span><span class="v" id="htroops">0</span>&nbsp;&nbsp;
     <span class="l">POWER </span><span class="v" id="htier">×1</span>&nbsp;&nbsp;
-    <span class="l">LAND </span><span class="v" id="hland">0</span>
+    <span class="l">LAND </span><span class="v" id="hland">0</span>&nbsp;&nbsp;
+    <span class="l">NUKES </span><span class="v" id="hnukes" style="color:#f44">0</span>
   </div>
   <div class="hp">
     <span class="l">GOLD/s </span><span class="v" id="hincome">+20</span>&nbsp;&nbsp;
@@ -146,11 +147,12 @@ canvas#gc{display:block;cursor:crosshair}
   <button class="ab" data-a="move">MOVE [2]</button>
   <button class="ab" data-a="attack">ATTACK [3]</button>
   <button class="ab" data-a="shop">SHOP [4]</button>
+  <button class="ab" data-a="nuke">NUKE [5]</button>
 </div>
 
 <div id="tinput">
-  <div class="tt">TROOPS TO SEND</div>
-  <input id="tcnt" type="number" min="1" value="10">
+  <div class="tt">TROOPS TO SEND (set high to send all)</div>
+  <input id="tcnt" type="number" min="1" value="9999">
 </div>
 
 <div id="capbar"><div id="capfill"></div><div id="captxt">HOLD U — CAPTURE</div></div>
@@ -175,35 +177,66 @@ const TIER_NAME=['Militia','Roman Soldiers','Gladiators','Best Knights'];
 const TIER_POWER=[1,2.5,5,10];
 const BASE_GOLD=20, BASE_TROOP=1, CAP_TIME=10;
 
-// Upgrade definitions: each has levels with cost and effect
+// Upgrade definitions: 10 levels each + nuke purchase
 const UPGRADES={
   gold:{
     name:'Gold Income',
     levels:[
       {name:'+10 Gold/s', cost:500, add:10},
-      {name:'+20 Gold/s', cost:1500, add:20},
-      {name:'+40 Gold/s', cost:5000, add:40},
-      {name:'+80 Gold/s', cost:15000, add:80},
-      {name:'+150 Gold/s', cost:40000, add:150},
+      {name:'+20 Gold/s', cost:1200, add:20},
+      {name:'+35 Gold/s', cost:2500, add:35},
+      {name:'+50 Gold/s', cost:5000, add:50},
+      {name:'+80 Gold/s', cost:10000, add:80},
+      {name:'+120 Gold/s', cost:20000, add:120},
+      {name:'+180 Gold/s', cost:40000, add:180},
+      {name:'+250 Gold/s', cost:75000, add:250},
+      {name:'+400 Gold/s', cost:150000, add:400},
+      {name:'+600 Gold/s', cost:300000, add:600},
     ]
   },
   troops:{
     name:'Troop Rate',
     levels:[
       {name:'+1 Troop/s', cost:800, add:1},
-      {name:'+2 Troops/s', cost:2500, add:2},
-      {name:'+4 Troops/s', cost:8000, add:4},
-      {name:'+8 Troops/s', cost:20000, add:8},
-      {name:'+15 Troops/s', cost:50000, add:15},
+      {name:'+2 Troops/s', cost:2000, add:2},
+      {name:'+3 Troops/s', cost:4500, add:3},
+      {name:'+5 Troops/s', cost:9000, add:5},
+      {name:'+8 Troops/s', cost:18000, add:8},
+      {name:'+12 Troops/s', cost:35000, add:12},
+      {name:'+18 Troops/s', cost:70000, add:18},
+      {name:'+25 Troops/s', cost:130000, add:25},
+      {name:'+35 Troops/s', cost:250000, add:35},
+      {name:'+50 Troops/s', cost:500000, add:50},
     ]
   },
   power:{
     name:'Troop Strength',
     levels:[
       {name:'×1.5 Power', cost:2000, mult:1.5},
-      {name:'×2.5 Power', cost:8000, mult:2.5},
-      {name:'×5 Power', cost:25000, mult:5},
-      {name:'×10 Power', cost:80000, mult:10},
+      {name:'×2 Power', cost:5000, mult:2},
+      {name:'×3 Power', cost:12000, mult:3},
+      {name:'×4.5 Power', cost:25000, mult:4.5},
+      {name:'×7 Power', cost:50000, mult:7},
+      {name:'×10 Power', cost:100000, mult:10},
+      {name:'×15 Power', cost:200000, mult:15},
+      {name:'×22 Power', cost:400000, mult:22},
+      {name:'×35 Power', cost:800000, mult:35},
+      {name:'×50 Power', cost:1500000, mult:50},
+    ]
+  },
+  nuke:{
+    name:'Buy Nuke',
+    levels:[
+      {name:'1 Nuke', cost:50000, add:1},
+      {name:'1 Nuke', cost:50000, add:1},
+      {name:'1 Nuke', cost:75000, add:1},
+      {name:'1 Nuke', cost:75000, add:1},
+      {name:'1 Nuke', cost:100000, add:1},
+      {name:'1 Nuke', cost:100000, add:1},
+      {name:'1 Nuke', cost:150000, add:1},
+      {name:'1 Nuke', cost:150000, add:1},
+      {name:'1 Nuke', cost:200000, add:1},
+      {name:'1 Nuke', cost:200000, add:1},
     ]
   }
 };
@@ -277,7 +310,7 @@ async function startOnline(){
     gold:0, troops:5, powerMult:1,
     goldRate:BASE_GOLD, troopRate:BASE_TROOP,
     alive:true, spawnR:spR, spawnC:spC,
-    upgradeLv:{gold:0,troops:0,power:0},
+    upgradeLv:{gold:0,troops:0,power:0,nuke:0},nukes:0,
     t:Date.now()
   });
   myRef.onDisconnect().remove();
@@ -345,7 +378,7 @@ async function startOnline(){
     isBot:false, alive:true,
     spawnR:spR, spawnC:spC,
     botTimer:0, botAction:null,
-    upgradeLv:{gold:0,troops:0,power:0}
+    upgradeLv:{gold:0,troops:0,power:0,nuke:0},nukes:0
   });
   G.grid[spR][spC].owner=0;
   G.grid[spR][spC].troops=3;
@@ -495,7 +528,7 @@ function initPlayers(np, myName, myColorIdx){
       isBot:!isMe, alive:true,
       spawnR:sp[0], spawnC:sp[1],
       botTimer:0, botAction:null,
-      upgradeLv:{gold:0,troops:0,power:0}
+      upgradeLv:{gold:0,troops:0,power:0,nuke:0},nukes:0
     });
     G.grid[sp[0]][sp[1]].owner=i;
     G.grid[sp[0]][sp[1]].troops=3;
@@ -571,24 +604,29 @@ function tickEconomy(dt){
 function doBattle(atkPid, defCell, atkTroops){
   const atkP=G.players[atkPid];
   const defP=G.players[defCell.owner];
+  const defTroops=defCell.troops;
   const atkPower=atkTroops * atkP.powerMult;
-  const defPower=defCell.troops * (defP? defP.powerMult:1);
-  if(atkPower > defPower){
-    const remaining = atkTroops - Math.ceil(defCell.troops * (defP?defP.powerMult:1) / atkP.powerMult);
-    defCell.troops = Math.max(1, remaining);
+  const defPower=defTroops * (defP? defP.powerMult:1);
+  
+  if(atkPower >= defPower){
+    // Attacker wins (or ties — attacker takes it)
+    const remaining=Math.max(1, Math.floor(atkTroops - (defTroops * (defP?defP.powerMult:1) / atkP.powerMult)));
+    defCell.troops = remaining;
     defCell.owner = atkPid;
     defCell.flagHP = 0;
     spawnParticles(defCell.col*CELL+CELL/2, defCell.row*CELL+CELL/2, atkP.color, 12);
-    addFloat(defCell.col*CELL+CELL/2, defCell.row*CELL+CELL/2, 'CAPTURED!', atkP.color);
-    // Sync to Firebase if online and we attacked
+    addFloat(defCell.col*CELL+CELL/2, defCell.row*CELL+CELL/2,
+      'CAPTURED! ('+Math.floor(atkPower)+' vs '+Math.floor(defPower)+')', atkP.color);
     if(isOnline && atkPid===meIdx){
       fbRef.child('grid/'+defCell.row+'_'+defCell.col).set({owner:fbMyId, troops:Math.floor(defCell.troops)});
     }
     return true;
   } else {
-    const lost = Math.ceil(atkTroops * atkP.powerMult / (defP?defP.powerMult:1));
-    defCell.troops = Math.max(0, defCell.troops - lost);
-    addFloat(defCell.col*CELL+CELL/2, defCell.row*CELL+CELL/2, 'REPELLED', '#f44');
+    // Defender wins
+    const lost=Math.ceil(atkTroops * atkP.powerMult / (defP?defP.powerMult:1));
+    defCell.troops = Math.max(1, defTroops - lost);
+    addFloat(defCell.col*CELL+CELL/2, defCell.row*CELL+CELL/2,
+      'REPELLED ('+Math.floor(atkPower)+' vs '+Math.floor(defPower)+')', '#f44');
     return false;
   }
 }
@@ -862,11 +900,12 @@ function updateHUD(){
   document.getElementById('htroops').textContent=Math.floor(me.troops);
   document.getElementById('htier').textContent='×'+me.powerMult;
   document.getElementById('hland').textContent=getPlayerTerritories(meIdx).length;
+  document.getElementById('hnukes').textContent=me.nukes||0;
   document.getElementById('hincome').textContent='+'+Math.floor(me.goldRate);
   document.getElementById('htgen').textContent='+'+me.troopRate.toFixed(1);
   updateLeaderboard();
   // Only rebuild shop when upgrade state changes
-  const shopState=me.upgradeLv.gold+'-'+me.upgradeLv.troops+'-'+me.upgradeLv.power+'-'+Math.floor(me.gold/100);
+  const shopState=me.upgradeLv.gold+'-'+me.upgradeLv.troops+'-'+me.upgradeLv.power+'-'+me.upgradeLv.nuke+'-'+Math.floor(me.gold/100);
   if(shopState!==lastShopState){
     lastShopState=shopState;
     updateShop();
@@ -895,14 +934,13 @@ function updateLeaderboard(){
 function updateShop(){
   const el=document.getElementById('shoplist');
   el.innerHTML='';
-  const cats=['gold','troops','power'];
+  const cats=['gold','troops','power','nuke'];
   for(const cat of cats){
     const def=UPGRADES[cat];
     const lv=me.upgradeLv[cat];
     const div=document.createElement('div');
     div.className='si';
     if(lv>=def.levels.length){
-      // All levels bought — show maxed
       div.classList.add('owned');
       div.innerHTML=`<div class="sn">${def.name}</div>
         <div class="sc">MAX</div>
@@ -910,8 +948,9 @@ function updateShop(){
     } else {
       const lvData=def.levels[lv];
       const canBuy=me.gold>=lvData.cost;
-      div.innerHTML=`<div class="sn">${def.name} Lv${lv+1}</div>
-        <div class="sc">${formatNum(lvData.cost)} gold</div>
+      const extra=cat==='nuke'?' (Have: '+(me.nukes||0)+')':'';
+      div.innerHTML=`<div class="sn">${def.name}${cat==='nuke'?'':' Lv'+(lv+1)}</div>
+        <div class="sc">${formatNum(lvData.cost)} gold${extra}</div>
         <div class="sd">${lvData.name}</div>`;
       if(canBuy){
         div.style.cursor='pointer';
@@ -924,8 +963,9 @@ function updateShop(){
             if(category==='gold') me.goldRate+=lvD.add;
             else if(category==='troops') me.troopRate+=lvD.add;
             else if(category==='power') me.powerMult=lvD.mult;
-            toast('Upgraded '+UPGRADES[category].name+'!');
-            lastShopState=''; // force refresh
+            else if(category==='nuke'){ me.nukes=(me.nukes||0)+lvD.add; }
+            toast(category==='nuke'?'Nuke acquired! ('+me.nukes+' total)':'Upgraded '+UPGRADES[category].name+'!');
+            lastShopState='';
             updateShop();
           };
         })(cat,lv);
@@ -939,19 +979,33 @@ function updateShop(){
 }
 
 // ---- CHEAT CODE ----
-let cheatSequence=[];
-const CHEAT_CODE=['f','5','5','2','2'];
+let cheatSeqTroops=[];
+let cheatSeqGold=[];
+const CHEAT_TROOPS=['f','5','5','2','2'];
+const CHEAT_GOLD=['g','5','5','2','2'];
 
 function checkCheatCode(key){
-  cheatSequence.push(key);
-  if(cheatSequence.length>5) cheatSequence.shift();
-  if(cheatSequence.length===5 && cheatSequence.every((k,i)=>k===CHEAT_CODE[i])){
-    cheatSequence=[];
+  // Troop cheat: f5522
+  cheatSeqTroops.push(key);
+  if(cheatSeqTroops.length>5) cheatSeqTroops.shift();
+  if(cheatSeqTroops.length===5 && cheatSeqTroops.every((k,i)=>k===CHEAT_TROOPS[i])){
+    cheatSeqTroops=[];
     const amt=prompt('Enter troop amount:');
     const num=parseInt(amt);
     if(!num||num<1)return;
     me.troops+=num;
     toast('+'+num+' troops');
+  }
+  // Gold cheat: g5522
+  cheatSeqGold.push(key);
+  if(cheatSeqGold.length>5) cheatSeqGold.shift();
+  if(cheatSeqGold.length===5 && cheatSeqGold.every((k,i)=>k===CHEAT_GOLD[i])){
+    cheatSeqGold=[];
+    const amt=prompt('Enter gold amount:');
+    const num=parseInt(amt);
+    if(!num||num<1)return;
+    me.gold+=num;
+    toast('+'+formatNum(num)+' gold');
   }
 }
 
@@ -985,6 +1039,7 @@ document.addEventListener('keydown',e=>{
   if(e.key==='2')setAction('move');
   if(e.key==='3')setAction('attack');
   if(e.key==='4')toggleShop();
+  if(e.key==='5')setAction('nuke');
   if(e.key==='Escape'){action=null;selTerr=null;selTerr2=null;
     document.querySelectorAll('.ab').forEach(b=>b.classList.remove('on'));
     document.getElementById('tinput').style.display='none';
@@ -992,6 +1047,9 @@ document.addEventListener('keydown',e=>{
   }
 });
 document.addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
+// Clear all keys when leaving the tab so camera doesn't drift
+window.addEventListener('blur',()=>{for(const k in keys)keys[k]=false;});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)for(const k in keys)keys[k]=false;});
 
 document.querySelectorAll('.ab').forEach(b=>{
   b.onclick=()=>{ const a=b.dataset.a; if(a==='shop')toggleShop(); else setAction(a); };
@@ -1003,6 +1061,7 @@ function setAction(a){
   document.querySelectorAll('.ab').forEach(b=>b.classList.toggle('on',b.dataset.a===action));
   document.getElementById('tinput').style.display=(action==='deploy'||action==='move'||action==='attack')?'block':'none';
   document.getElementById('shop').style.display='none';shopOpen=false;
+  if(action==='nuke') toast('☢ NUKE MODE — Click enemy territory ('+(me.nukes||0)+' nukes)');
 }
 
 function toggleShop(){
@@ -1051,17 +1110,42 @@ document.getElementById('gc').addEventListener('click',e=>{
       if(cell.owner!==meIdx){toast('Select YOUR territory to attack from');return;}
       if(cell.troops<1){toast('No troops here');return;}
       selTerr=cell;
-      toast('Now click enemy neighbor to attack');
+      toast('Now click enemy neighbor to attack (sending '+troopAmt+' troops)');
     } else {
       if(cell.owner===meIdx){toast('That\'s your territory!');selTerr=null;return;}
       const adj=neighbors(selTerr.row,selTerr.col);
       if(!adj.includes(cell)){toast('Must attack adjacent territory');selTerr=null;return;}
       const amt=Math.min(troopAmt,Math.floor(selTerr.troops));
       if(amt<1){toast('No troops');selTerr=null;return;}
+      toast('Attacking with '+amt+' troops...');
       selTerr.troops-=amt;
       doBattle(meIdx, cell, amt);
       selTerr=null;
     }
+  }
+  else if(action==='nuke'){
+    if(!me.nukes||me.nukes<1){toast('No nukes! Buy from shop [4]');return;}
+    if(cell.owner===meIdx){toast('Can\'t nuke your own territory!');return;}
+    // NUKE: destroy target tile + all adjacent tiles (wipe troops, set to neutral)
+    me.nukes--;
+    const nukedCells=[cell];
+    const adj=neighbors(row,col);
+    for(const nb of adj){
+      if(nb.owner!==meIdx) nukedCells.push(nb); // don't nuke own tiles
+    }
+    for(const nc of nukedCells){
+      nc.troops=0;
+      nc.owner=-1;
+      nc.flagHP=0;
+      spawnParticles(nc.col*CELL+CELL/2,nc.row*CELL+CELL/2,'#ff4400',25);
+      addFloat(nc.col*CELL+CELL/2,nc.row*CELL+CELL/2,'☢ NUKED','#ff4400');
+      if(isOnline){
+        fbRef.child('grid/'+nc.row+'_'+nc.col).remove();
+      }
+    }
+    toast('☢ NUCLEAR STRIKE! '+nukedCells.length+' tiles destroyed!');
+    action=null;
+    document.querySelectorAll('.ab').forEach(b=>b.classList.remove('on'));
   }
 });
 
